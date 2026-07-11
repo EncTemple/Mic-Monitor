@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>Chapel Level Monitor</title>
+<style>
+  :root {
+    --bg: #15181b;
+    --panel: #1d2226;
+    --panel-2: #22272c;
+    --border: #2b3136;
+    --text: #ece9e4;
+    --text-dim: #868b90;
+    --text-faint: #5c6165;
+    --quiet: #4e8fbf;
+    --good: #6fa86f;
+    --loud: #c0574a;
+    --brass: #b08d57;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    overscroll-behavior-y: contain;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: max(24px, env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom));
+    gap: 20px;
+  }
+
+  .wrap { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 20px; }
+
+  header { text-align: center; }
+  h1 {
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    margin: 0 0 2px;
+  }
+  .subtitle {
+    font-size: 12.5px;
+    color: var(--text-dim);
+    letter-spacing: 0.02em;
+  }
+
+  /* --- Status lamp: the signature element --- */
+  .lamp-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 22px 20px 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .lamp {
+    width: 84px;
+    height: 84px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #3a3f43, #202428 70%);
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: box-shadow 0.6s ease;
+  }
+  .lamp::after {
+    content: "";
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    background: var(--text-faint);
+    transition: background 0.6s ease, box-shadow 0.6s ease;
+  }
+  .lamp.quiet::after { background: var(--quiet); box-shadow: 0 0 18px 4px rgba(78,143,191,0.55); }
+  .lamp.good::after  { background: var(--good);  box-shadow: 0 0 18px 4px rgba(111,168,111,0.55); }
+  .lamp.loud::after  { background: var(--loud);  box-shadow: 0 0 18px 4px rgba(192,87,74,0.55); }
+  .lamp.quiet { box-shadow: 0 0 30px 6px rgba(78,143,191,0.12); }
+  .lamp.good  { box-shadow: 0 0 30px 6px rgba(111,168,111,0.12); }
+  .lamp.loud  { box-shadow: 0 0 30px 6px rgba(192,87,74,0.12); }
+
+  .lamp-label {
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+  }
+  .lamp-label b { color: var(--text); font-weight: 600; }
+  .lamp-sub { font-size: 11.5px; color: var(--text-faint); text-align: center; max-width: 280px; }
+
+  /* --- Fast meter --- */
+  .meter-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 18px 18px 16px;
+  }
+  .meter-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
+  .meter-title { font-size: 12px; color: var(--text-dim); letter-spacing: 0.04em; text-transform: uppercase; }
+  .db-readout { font-family: var(--mono); font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
+
+  .bar-track {
+    position: relative;
+    height: 34px;
+    border-radius: 8px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    overflow: hidden;
+  }
+  .bar-fill {
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 0%;
+    background: linear-gradient(90deg, var(--quiet), var(--good) 55%, var(--loud) 88%);
+    transition: width 0.08s linear;
+  }
+  .bar-scale {
+    display: flex;
+    justify-content: space-between;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    color: var(--text-faint);
+    margin-top: 6px;
+  }
+
+  /* --- Long-term trend strip --- */
+  .trend-card {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 16px 18px;
+  }
+  .trend-title { font-size: 12px; color: var(--text-dim); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 10px; }
+  canvas#trend { width: 100%; height: 64px; display: block; border-radius: 6px; }
+
+  /* --- Controls --- */
+  .btn-row { display: flex; gap: 10px; }
+  button.primary {
+    flex: 1;
+    background: var(--brass);
+    color: #171a1c;
+    border: none;
+    border-radius: 12px;
+    padding: 15px;
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+  }
+  button.primary.active { background: var(--loud); color: #fff; }
+  button.primary:active { opacity: 0.85; }
+  button.primary:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+  details.settings {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+  }
+  details.settings summary {
+    padding: 14px 18px;
+    font-size: 13px;
+    color: var(--text-dim);
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    list-style: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  details.settings summary::-webkit-details-marker { display: none; }
+  summary::after { content: "▸"; color: var(--text-faint); transition: transform 0.2s; }
+  details[open] summary::after { transform: rotate(90deg); }
+
+  .settings-body { padding: 4px 18px 18px; display: flex; flex-direction: column; gap: 16px; }
+
+  .preset-row { display: flex; gap: 8px; }
+  .preset-btn {
+    flex: 1;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    color: var(--text-dim);
+    border-radius: 9px;
+    padding: 9px;
+    font-size: 12.5px;
+    cursor: pointer;
+  }
+  .preset-btn.selected { border-color: var(--brass); color: var(--text); }
+
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim); }
+  .field-label span:last-child { font-family: var(--mono); color: var(--text); }
+  input[type="range"] { width: 100%; accent-color: var(--brass); }
+
+  footer { font-size: 11px; color: var(--text-faint); text-align: center; line-height: 1.5; padding-top: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Chapel Level Monitor</h1>
+    <div class="subtitle">External microphone · Web Audio</div>
+  </header>
+
+  <div class="lamp-card">
+    <div class="lamp quiet" id="lamp"></div>
+    <div class="lamp-label" id="lampLabel"><b>IDLE</b></div>
+    <div class="lamp-sub" id="lampSub">Tap Start. The lamp only changes after the level has held steady for a while — short peaks won't trigger it.</div>
+  </div>
+
+  <div class="meter-card">
+    <div class="meter-row">
+      <span class="meter-title">Instantaneous</span>
+      <span class="db-readout" id="dbReadout">— dB</span>
+    </div>
+    <div class="bar-track">
+      <div class="bar-fill" id="barFill"></div>
+    </div>
+    <div class="bar-scale">
+      <span id="scaleMin">-60</span>
+      <span id="scaleQuiet">-30</span>
+      <span id="scaleLoud">-12</span>
+      <span id="scaleMax">0</span>
+    </div>
+  </div>
+
+  <div class="trend-card">
+    <div class="trend-title">Sustained level · last <span id="windowLabel">25</span>s</div>
+    <canvas id="trend" width="400" height="64"></canvas>
+  </div>
+
+  <div class="btn-row">
+    <button class="primary" id="toggleBtn">Start monitoring</button>
+  </div>
+
+  <details class="settings">
+    <summary><span>Calibration</span><span></span></summary>
+    <div class="settings-body">
+
+      <div class="preset-row">
+        <button class="preset-btn selected" data-preset="speech">Spoken word</button>
+        <button class="preset-btn" data-preset="music">Music group</button>
+      </div>
+
+      <div class="field">
+        <label class="field-label"><span>Quiet / good boundary</span><span id="quietVal">-30 dB</span></label>
+        <input type="range" id="quietSlider" min="-50" max="-15" step="1" value="-30" />
+      </div>
+
+      <div class="field">
+        <label class="field-label"><span>Good / loud boundary</span><span id="loudVal">-12 dB</span></label>
+        <input type="range" id="loudSlider" min="-20" max="0" step="1" value="-12" />
+      </div>
+
+      <div class="field">
+        <label class="field-label"><span>Averaging window</span><span id="winVal">25 s</span></label>
+        <input type="range" id="winSlider" min="10" max="60" step="5" value="25" />
+      </div>
+
+      <div class="field">
+        <label class="field-label"><span>Dwell before lamp changes</span><span id="dwellVal">8 s</span></label>
+        <input type="range" id="dwellSlider" min="0" max="20" step="1" value="8" />
+      </div>
+
+    </div>
+  </details>
+
+  <footer>Averaging window and dwell time control how long a level must persist before the status lamp changes — brief peaks are absorbed. Adjust boundaries live in the room to calibrate.</footer>
+
+</div>
+
+<script>
+(function () {
+  "use strict";
+
+  // ---- DOM ----
+  const toggleBtn   = document.getElementById("toggleBtn");
+  const dbReadout   = document.getElementById("dbReadout");
+  const barFill     = document.getElementById("barFill");
+  const lamp        = document.getElementById("lamp");
+  const lampLabel   = document.getElementById("lampLabel");
+  const lampSub     = document.getElementById("lampSub");
+  const trendCanvas = document.getElementById("trend");
+  const trendCtx    = trendCanvas.getContext("2d");
+  const windowLabel = document.getElementById("windowLabel");
+
+  const quietSlider = document.getElementById("quietSlider");
+  const loudSlider  = document.getElementById("loudSlider");
+  const winSlider   = document.getElementById("winSlider");
+  const dwellSlider = document.getElementById("dwellSlider");
+  const quietVal    = document.getElementById("quietVal");
+  const loudVal     = document.getElementById("loudVal");
+  const winVal      = document.getElementById("winVal");
+  const dwellVal    = document.getElementById("dwellVal");
+  const scaleQuiet  = document.getElementById("scaleQuiet");
+  const scaleLoud   = document.getElementById("scaleLoud");
+  const presetBtns  = document.querySelectorAll(".preset-btn");
+
+  // ---- Config state ----
+  let quietMax = -30;   // below this = quiet
+  let loudMin  = -12;   // above this = loud
+  let windowSec = 25;   // long-term averaging window
+  let dwellSec  = 8;    // time a candidate zone must persist before lamp switches
+  const HYSTERESIS = 2; // dB band to prevent flicker at boundaries
+
+  const presets = {
+    speech: { quiet: -30, loud: -12, win: 25 },
+    music:  { quiet: -26, loud: -6,  win: 20 }
+  };
+
+  function applyConfigToUI() {
+    quietSlider.value = quietMax;
+    loudSlider.value = loudMin;
+    winSlider.value = windowSec;
+    dwellSlider.value = dwellSec;
+    quietVal.textContent = quietMax + " dB";
+    loudVal.textContent = loudMin + " dB";
+    winVal.textContent = windowSec + " s";
+    dwellVal.textContent = dwellSec + " s";
+    scaleQuiet.textContent = quietMax;
+    scaleLoud.textContent = loudMin;
+    windowLabel.textContent = windowSec;
+  }
+  applyConfigToUI();
+
+  presetBtns.forEach(btn => {
+    btn.addEventListener("click", () => {
+      presetBtns.forEach(b => b.classList.remove("selected"));
+      btn.classList.add("selected");
+      const p = presets[btn.dataset.preset];
+      quietMax = p.quiet; loudMin = p.loud; windowSec = p.win;
+      applyConfigToUI();
+      resizeLongTermBuffer();
+    });
+  });
+
+  quietSlider.addEventListener("input", () => { quietMax = Number(quietSlider.value); applyConfigToUI(); });
+  loudSlider.addEventListener("input",  () => { loudMin  = Number(loudSlider.value);  applyConfigToUI(); });
+  winSlider.addEventListener("input",   () => { windowSec = Number(winSlider.value); applyConfigToUI(); resizeLongTermBuffer(); });
+  dwellSlider.addEventListener("input", () => { dwellSec  = Number(dwellSlider.value); applyConfigToUI(); });
+
+  // ---- Audio state ----
+  let audioCtx, analyser, sourceNode, stream;
+  let rafId = null;
+  let running = false;
+
+  // Fast (instantaneous) smoothing
+  let fastDb = -60;
+  const FAST_ATTACK = 0.5;
+  const FAST_RELEASE = 0.15;
+
+  // Long-term buffer: samples pushed every SAMPLE_INTERVAL_MS, stored as linear power
+  const SAMPLE_INTERVAL_MS = 200;
+  let longTermBuffer = [];
+  let longTermTimer = null;
+
+  // Trend history for the canvas (one point per sample interval, capped)
+  let trendHistory = [];
+  const TREND_MAX_POINTS = 300; // 60s at 200ms
+
+  // Dwell tracking
+  let candidateZone = "idle";
+  let candidateSince = 0;
+  let displayedZone = "idle";
+
+  function resizeLongTermBuffer() {
+    const maxSamples = Math.round((windowSec * 1000) / SAMPLE_INTERVAL_MS);
+    if (longTermBuffer.length > maxSamples) {
+      longTermBuffer = longTermBuffer.slice(longTermBuffer.length - maxSamples);
+    }
+  }
+
+  function dbToLinearPower(db) { return Math.pow(10, db / 10); }
+  function linearPowerToDb(p) { return 10 * Math.log10(Math.max(p, 1e-10)); }
+
+  function zoneForDb(db) {
+    if (db < quietMax) return "quiet";
+    if (db > loudMin) return "loud";
+    return "good";
+  }
+
+  // Zone with hysteresis relative to the currently displayed zone
+  function zoneWithHysteresis(db) {
+    if (displayedZone === "quiet") {
+      if (db > quietMax + HYSTERESIS) return db > loudMin ? "loud" : "good";
+      return "quiet";
+    }
+    if (displayedZone === "loud") {
+      if (db < loudMin - HYSTERESIS) return db < quietMax ? "quiet" : "good";
+      return "loud";
+    }
+    if (displayedZone === "good") {
+      if (db < quietMax - HYSTERESIS) return "quiet";
+      if (db > loudMin + HYSTERESIS) return "loud";
+      return "good";
+    }
+    return zoneForDb(db);
+  }
+
+  async function start() {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: false
+        }
+      });
+    } catch (err) {
+      lampSub.textContent = "Microphone access failed: " + err.message;
+      return;
+    }
+
+    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") await audioCtx.resume();
+
+    sourceNode = audioCtx.createMediaStreamSource(stream);
+    analyser = audioCtx.createAnalyser();
+    analyser.fftSize = 2048;
+    sourceNode.connect(analyser);
+
+    running = true;
+    toggleBtn.textContent = "Stop monitoring";
+    toggleBtn.classList.add("active");
+    lampSub.textContent = "Listening…";
+
+    const buf = new Float32Array(analyser.fftSize);
+
+    function fastLoop() {
+      if (!running) return;
+      analyser.getFloatTimeDomainData(buf);
+      let sumSq = 0;
+      for (let i = 0; i < buf.length; i++) sumSq += buf[i] * buf[i];
+      const rms = Math.sqrt(sumSq / buf.length);
+      const instDb = Math.max(-60, Math.min(0, linearPowerToDb(rms * rms)));
+
+      const rate = instDb > fastDb ? FAST_ATTACK : FAST_RELEASE;
+      fastDb += (instDb - fastDb) * rate;
+
+      dbReadout.textContent = Math.round(fastDb) + " dB";
+      const pct = ((fastDb + 60) / 60) * 100;
+      barFill.style.width = Math.max(0, Math.min(100, pct)) + "%";
+
+      rafId = requestAnimationFrame(fastLoop);
+    }
+    fastLoop();
+
+    longTermTimer = setInterval(() => {
+      const power = dbToLinearPower(fastDb);
+      longTermBuffer.push(power);
+      resizeLongTermBuffer();
+
+      const avgPower = longTermBuffer.reduce((a, b) => a + b, 0) / longTermBuffer.length;
+      const longTermDb = linearPowerToDb(avgPower);
+
+      trendHistory.push(longTermDb);
+      if (trendHistory.length > TREND_MAX_POINTS) trendHistory.shift();
+      drawTrend();
+
+      const zone = zoneWithHysteresis(longTermDb);
+      const now = performance.now();
+
+      if (zone !== candidateZone) {
+        candidateZone = zone;
+        candidateSince = now;
+      }
+      const heldFor = (now - candidateSince) / 1000;
+
+      if (zone !== displayedZone && heldFor >= dwellSec) {
+        displayedZone = zone;
+        updateLamp(displayedZone, longTermDb);
+      } else if (displayedZone === "idle") {
+        // first reading after start — don't force a long dwell before any indication
+        displayedZone = zone;
+        updateLamp(displayedZone, longTermDb);
+      }
+    }, SAMPLE_INTERVAL_MS);
+  }
+
+  function updateLamp(zone, longTermDb) {
+    lamp.classList.remove("quiet", "good", "loud");
+    lamp.classList.add(zone);
+    const labels = {
+      quiet: "Too quiet",
+      good: "Good level",
+      loud: "Too loud"
+    };
+    lampLabel.innerHTML = "<b>" + labels[zone] + "</b>";
+    lampSub.textContent = "Sustained average: " + Math.round(longTermDb) + " dB over the last " + windowSec + "s";
+  }
+
+  function stop() {
+    running = false;
+    if (rafId) cancelAnimationFrame(rafId);
+    if (longTermTimer) clearInterval(longTermTimer);
+    if (sourceNode) sourceNode.disconnect();
+    if (stream) stream.getTracks().forEach(t => t.stop());
+    if (audioCtx) audioCtx.close();
+
+    toggleBtn.textContent = "Start monitoring";
+    toggleBtn.classList.remove("active");
+    dbReadout.textContent = "— dB";
+    barFill.style.width = "0%";
+    lamp.classList.remove("quiet", "good", "loud");
+    lampLabel.innerHTML = "<b>IDLE</b>";
+    lampSub.textContent = "Tap Start. The lamp only changes after the level has held steady for a while — short peaks won't trigger it.";
+    longTermBuffer = [];
+    trendHistory = [];
+    candidateZone = "idle";
+    displayedZone = "idle";
+    drawTrend();
+  }
+
+  function drawTrend() {
+    const w = trendCanvas.width, h = trendCanvas.height;
+    trendCtx.clearRect(0, 0, w, h);
+    trendCtx.fillStyle = "#171b1e";
+    trendCtx.fillRect(0, 0, w, h);
+
+    if (trendHistory.length < 2) return;
+
+    const minDb = -60, maxDb = 0;
+    const stepX = w / (TREND_MAX_POINTS - 1);
+    const startIdx = TREND_MAX_POINTS - trendHistory.length;
+
+    // threshold reference lines
+    trendCtx.strokeStyle = "rgba(255,255,255,0.08)";
+    trendCtx.lineWidth = 1;
+    [quietMax, loudMin].forEach(db => {
+      const y = h - ((db - minDb) / (maxDb - minDb)) * h;
+      trendCtx.beginPath();
+      trendCtx.moveTo(0, y);
+      trendCtx.lineTo(w, y);
+      trendCtx.stroke();
+    });
+
+    trendCtx.beginPath();
+    trendHistory.forEach((db, i) => {
+      const x = (startIdx + i) * stepX;
+      const y = h - ((db - minDb) / (maxDb - minDb)) * h;
+      if (i === 0) trendCtx.moveTo(x, y);
+      else trendCtx.lineTo(x, y);
+    });
+    trendCtx.strokeStyle = "#b08d57";
+    trendCtx.lineWidth = 2;
+    trendCtx.stroke();
+  }
+
+  drawTrend();
+
+  toggleBtn.addEventListener("click", () => {
+    if (running) stop();
+    else start();
+  });
+
+})();
+</script>
+</body>
+</html>
