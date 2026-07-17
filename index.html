@@ -350,48 +350,95 @@
       const p = presets[btn.dataset.preset];
       quietMax = p.quiet; loudMin = p.loud; windowSec = p.win;
       applyConfigToUI();
-      resizeLongTermBuffer();
     });
   });
 
   quietSlider.addEventListener("input", () => { quietMax = Number(quietSlider.value); applyConfigToUI(); });
   loudSlider.addEventListener("input",  () => { loudMin  = Number(loudSlider.value);  applyConfigToUI(); });
-  winSlider.addEventListener("input",   () => { windowSec = Number(winSlider.value); applyConfigToUI(); resizeLongTermBuffer(); });
+  winSlider.addEventListener("input",   () => { windowSec = Number(winSlider.value); applyConfigToUI(); });
   dwellSlider.addEventListener("input", () => { dwellSec  = Number(dwellSlider.value); applyConfigToUI(); });
 
   // ---- Audio state ----
-  let audioCtx, analyser, sourceNode, stream;
+  let audioCtx, preFilter, rlbFilter, sourceNode, scriptNode, muteGain, stream;
   let rafId = null;
   let running = false;
 
-  // Fast (instantaneous) smoothing
-  let fastDb = -60;
+  // ---- BS.1770 K-weighting filter design (fs-adaptive) ----
+  // Reproduces the published 48kHz coefficients exactly, and derives correct
+  // coefficients at other sample rates (44.1kHz on many iPhones) using the
+  // same analog design parameters + bilinear transform, per ITU-R BS.1770 Annex 1.
+  function makePreFilterCoeffs(fs) {
+    const G = 3.99984385397343;
+    const f0 = 1681.9744509555319;
+    const Q = 0.7071752369554196;
+    const K = Math.tan(Math.PI * f0 / fs);
+    const Vh = Math.pow(10, G / 20);
+    const Vb = Math.pow(Vh, 0.4996667741545416);
+    const a0 = 1 + K / Q + K * K;
+    return {
+      b0: (Vh + Vb * K / Q + K * K) / a0,
+      b1: 2 * (K * K - Vh) / a0,
+      b2: (Vh - Vb * K / Q + K * K) / a0,
+      a1: 2 * (K * K - 1) / a0,
+      a2: (1 - K / Q + K * K) / a0
+    };
+  }
+  function makeRlbFilterCoeffs(fs) {
+    const f0 = 38.13547087613982;
+    const Q = 0.5003270373238773;
+    const K = Math.tan(Math.PI * f0 / fs);
+    const a0 = 1 + K / Q + K * K;
+    return {
+      b0: 1 / a0,
+      b1: -2 / a0,
+      b2: 1 / a0,
+      a1: 2 * (K * K - 1) / a0,
+      a2: (1 - K / Q + K * K) / a0
+    };
+  }
+
+  // ---- Loudness helpers ----
+  const ABS_GATE_LUFS = -70;
+  const REL_GATE_OFFSET = -10;
+  function loudnessFromZ(z) { return z > 0 ? -0.691 + 10 * Math.log10(z) : -70; }
+  function zFromLoudness(l) { return Math.pow(10, (l + 0.691) / 10); }
+
+  function computeGatedIntegrated(blocks) {
+    if (blocks.length === 0) return -70;
+    const absThreshZ = zFromLoudness(ABS_GATE_LUFS);
+    const passAbs = blocks.filter(b => b.z > absThreshZ);
+    if (passAbs.length === 0) return -70;
+    const meanZAbs = passAbs.reduce((a, b) => a + b.z, 0) / passAbs.length;
+    const relLUFS = loudnessFromZ(meanZAbs) + REL_GATE_OFFSET;
+    const relThreshZ = zFromLoudness(relLUFS);
+    const passRel = passAbs.filter(b => b.z > relThreshZ);
+    if (passRel.length === 0) return relLUFS;
+    const meanZRel = passRel.reduce((a, b) => a + b.z, 0) / passRel.length;
+    return loudnessFromZ(meanZRel);
+  }
+
+  // Momentary (400ms sliding window) block accumulator
+  let blockSamples = 0, sqBuf = null, sqPtr = 0, sqSum = 0, sqFilled = 0;
+
+  // Gating deque: {t, z} snapshots taken roughly every audio callback (~85-100ms)
+  let gatingDeque = [];
+
+  let latestMomentaryLUFS = -70;
+  let smoothedMomentaryLUFS = -70;
   const FAST_ATTACK = 0.5;
   const FAST_RELEASE = 0.15;
 
-  // Long-term buffer: samples pushed every SAMPLE_INTERVAL_MS, stored as linear power
-  const SAMPLE_INTERVAL_MS = 200;
-  let longTermBuffer = [];
-  let longTermTimer = null;
-
-  // Trend history for the canvas (one point per sample interval, capped)
   let trendHistory = [];
-  const TREND_MAX_POINTS = 300; // 60s at 200ms
+  const TREND_MAX_POINTS = 300;
 
-  // Dwell tracking
   let candidateZone = "idle";
   let candidateSince = 0;
   let displayedZone = "idle";
 
-  function resizeLongTermBuffer() {
-    const maxSamples = Math.round((windowSec * 1000) / SAMPLE_INTERVAL_MS);
-    if (longTermBuffer.length > maxSamples) {
-      longTermBuffer = longTermBuffer.slice(longTermBuffer.length - maxSamples);
-    }
+  function trimGatingDeque(nowMs) {
+    const cutoff = nowMs - windowSec * 1000;
+    while (gatingDeque.length && gatingDeque[0].t < cutoff) gatingDeque.shift();
   }
-
-  function dbToLinearPower(db) { return Math.pow(10, db / 10); }
-  function linearPowerToDb(p) { return 10 * Math.log10(Math.max(p, 1e-10)); }
 
   function zoneForDb(db) {
     if (db < quietMax) return "quiet";
@@ -399,7 +446,6 @@
     return "good";
   }
 
-  // Zone with hysteresis relative to the currently displayed zone
   function zoneWithHysteresis(db) {
     if (displayedZone === "quiet") {
       if (db > quietMax + HYSTERESIS) return db > loudMin ? "loud" : "good";
@@ -434,52 +480,65 @@
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === "suspended") await audioCtx.resume();
 
+    const fs = audioCtx.sampleRate;
+    blockSamples = Math.round(fs * 0.4);
+    sqBuf = new Float32Array(blockSamples);
+    sqPtr = 0; sqSum = 0; sqFilled = 0;
+    gatingDeque = [];
+    latestMomentaryLUFS = -70;
+    smoothedMomentaryLUFS = -70;
+
+    const preC = makePreFilterCoeffs(fs);
+    const rlbC = makeRlbFilterCoeffs(fs);
+    preFilter = audioCtx.createIIRFilter([preC.b0, preC.b1, preC.b2], [1, preC.a1, preC.a2]);
+    rlbFilter = audioCtx.createIIRFilter([rlbC.b0, rlbC.b1, rlbC.b2], [1, rlbC.a1, rlbC.a2]);
+
     sourceNode = audioCtx.createMediaStreamSource(stream);
-    analyser = audioCtx.createAnalyser();
-    analyser.fftSize = 2048;
-    sourceNode.connect(analyser);
+    scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
+    muteGain = audioCtx.createGain();
+    muteGain.gain.value = 0;
+
+    sourceNode.connect(preFilter);
+    preFilter.connect(rlbFilter);
+    rlbFilter.connect(scriptNode);
+    scriptNode.connect(muteGain);
+    muteGain.connect(audioCtx.destination);
 
     running = true;
     toggleBtn.textContent = "Stop monitoring";
     toggleBtn.classList.add("active");
     lampSub.textContent = "Listening…";
 
-    const buf = new Float32Array(analyser.fftSize);
-
-    function fastLoop() {
+    scriptNode.onaudioprocess = (e) => {
       if (!running) return;
-      analyser.getFloatTimeDomainData(buf);
-      let sumSq = 0;
-      for (let i = 0; i < buf.length; i++) sumSq += buf[i] * buf[i];
-      const rms = Math.sqrt(sumSq / buf.length);
-      const instDb = Math.max(-60, Math.min(0, linearPowerToDb(rms * rms)));
+      const input = e.inputBuffer.getChannelData(0);
+      for (let i = 0; i < input.length; i++) {
+        const sq = input[i] * input[i];
+        if (sqFilled < blockSamples) {
+          sqSum += sq;
+          sqBuf[sqPtr] = sq;
+          sqFilled++;
+        } else {
+          sqSum += sq - sqBuf[sqPtr];
+          sqBuf[sqPtr] = sq;
+        }
+        sqPtr = (sqPtr + 1) % blockSamples;
+      }
 
-      const rate = instDb > fastDb ? FAST_ATTACK : FAST_RELEASE;
-      fastDb += (instDb - fastDb) * rate;
+      const meanSq = sqSum / Math.max(sqFilled, 1);
+      latestMomentaryLUFS = Math.max(-70, loudnessFromZ(meanSq));
 
-      dbReadout.textContent = Math.round(fastDb) + " dB";
-      const pct = ((fastDb + 60) / 60) * 100;
-      barFill.style.width = Math.max(0, Math.min(100, pct)) + "%";
+      const now = performance.now();
+      gatingDeque.push({ t: now, z: meanSq });
+      trimGatingDeque(now);
 
-      rafId = requestAnimationFrame(fastLoop);
-    }
-    fastLoop();
+      const integratedLUFS = computeGatedIntegrated(gatingDeque);
 
-    longTermTimer = setInterval(() => {
-      const power = dbToLinearPower(fastDb);
-      longTermBuffer.push(power);
-      resizeLongTermBuffer();
-
-      const avgPower = longTermBuffer.reduce((a, b) => a + b, 0) / longTermBuffer.length;
-      const longTermDb = linearPowerToDb(avgPower);
-
-      trendHistory.push(longTermDb);
+      trendHistory.push(integratedLUFS);
       if (trendHistory.length > TREND_MAX_POINTS) trendHistory.shift();
       drawTrend();
 
-      const zone = zoneWithHysteresis(longTermDb);
-      const now = performance.now();
-
+      const zone = zoneWithHysteresis(integratedLUFS);
       if (zone !== candidateZone) {
         candidateZone = zone;
         candidateSince = now;
@@ -488,16 +547,29 @@
 
       if (zone !== displayedZone && heldFor >= dwellSec) {
         displayedZone = zone;
-        updateLamp(displayedZone, longTermDb);
+        updateLamp(displayedZone, integratedLUFS);
       } else if (displayedZone === "idle") {
-        // first reading after start — don't force a long dwell before any indication
         displayedZone = zone;
-        updateLamp(displayedZone, longTermDb);
+        updateLamp(displayedZone, integratedLUFS);
       }
-    }, SAMPLE_INTERVAL_MS);
+    };
+
+    function fastLoop() {
+      if (!running) return;
+      const rate = latestMomentaryLUFS > smoothedMomentaryLUFS ? FAST_ATTACK : FAST_RELEASE;
+      smoothedMomentaryLUFS += (latestMomentaryLUFS - smoothedMomentaryLUFS) * rate;
+
+      const clamped = Math.max(-60, Math.min(0, smoothedMomentaryLUFS));
+      dbReadout.textContent = Math.round(clamped) + " LUFS";
+      const pct = ((clamped + 60) / 60) * 100;
+      barFill.style.width = Math.max(0, Math.min(100, pct)) + "%";
+
+      rafId = requestAnimationFrame(fastLoop);
+    }
+    fastLoop();
   }
 
-  function updateLamp(zone, longTermDb) {
+  function updateLamp(zone, integratedLUFS) {
     lamp.classList.remove("quiet", "good", "loud");
     lamp.classList.add(zone);
     const labels = {
@@ -506,25 +578,28 @@
       loud: "Too loud"
     };
     lampLabel.innerHTML = "<b>" + labels[zone] + "</b>";
-    lampSub.textContent = "Sustained average: " + Math.round(longTermDb) + " dB over the last " + windowSec + "s";
+    lampSub.textContent = "Integrated (gated): " + Math.round(integratedLUFS) + " LUFS over the last " + windowSec + "s";
   }
 
   function stop() {
     running = false;
     if (rafId) cancelAnimationFrame(rafId);
-    if (longTermTimer) clearInterval(longTermTimer);
+    if (scriptNode) { scriptNode.onaudioprocess = null; scriptNode.disconnect(); }
     if (sourceNode) sourceNode.disconnect();
+    if (preFilter) preFilter.disconnect();
+    if (rlbFilter) rlbFilter.disconnect();
+    if (muteGain) muteGain.disconnect();
     if (stream) stream.getTracks().forEach(t => t.stop());
     if (audioCtx) audioCtx.close();
 
     toggleBtn.textContent = "Start monitoring";
     toggleBtn.classList.remove("active");
-    dbReadout.textContent = "— dB";
+    dbReadout.textContent = "— LUFS";
     barFill.style.width = "0%";
     lamp.classList.remove("quiet", "good", "loud");
     lampLabel.innerHTML = "<b>IDLE</b>";
     lampSub.textContent = "Tap Start. The lamp only changes after the level has held steady for a while — short peaks won't trigger it.";
-    longTermBuffer = [];
+    gatingDeque = [];
     trendHistory = [];
     candidateZone = "idle";
     displayedZone = "idle";
@@ -543,7 +618,6 @@
     const stepX = w / (TREND_MAX_POINTS - 1);
     const startIdx = TREND_MAX_POINTS - trendHistory.length;
 
-    // threshold reference lines
     trendCtx.strokeStyle = "rgba(255,255,255,0.08)";
     trendCtx.lineWidth = 1;
     [quietMax, loudMin].forEach(db => {
@@ -557,7 +631,7 @@
     trendCtx.beginPath();
     trendHistory.forEach((db, i) => {
       const x = (startIdx + i) * stepX;
-      const y = h - ((db - minDb) / (maxDb - minDb)) * h;
+      const y = h - ((Math.max(-60, Math.min(0, db)) - minDb) / (maxDb - minDb)) * h;
       if (i === 0) trendCtx.moveTo(x, y);
       else trendCtx.lineTo(x, y);
     });
