@@ -15,7 +15,7 @@
     --text: #ece9e4;
     --text-dim: #868b90;
     --text-faint: #5c6165;
-    --quiet: #4e8fbf;
+    --quiet: #8657b0;
     --good: #6fa86f;
     --loud: #c0574a;
     --brass: #b08d57;
@@ -70,32 +70,43 @@
     gap: 10px;
   }
 
-  .lamp {
-    width: 84px;
-    height: 84px;
-    border-radius: 50%;
-    background: radial-gradient(circle at 35% 30%, #3a3f43, #202428 70%);
-    border: 1px solid var(--border);
+  .stoplight {
     display: flex;
     align-items: center;
     justify-content: center;
-    position: relative;
-    transition: box-shadow 0.6s ease;
+    gap: 18px;
   }
-  .lamp::after {
-    content: "";
-    width: 46px;
-    height: 46px;
+
+  .light {
+    width: 58px;
+    height: 58px;
     border-radius: 50%;
-    background: var(--text-faint);
-    transition: background 0.6s ease, box-shadow 0.6s ease;
+    background: radial-gradient(circle at 35% 30%, #34383c, #1b1e21 70%);
+    border: 1px solid var(--border);
+    transition: background 0.5s ease, box-shadow 0.5s ease;
   }
-  .lamp.quiet::after { background: var(--quiet); box-shadow: 0 0 18px 4px rgba(78,143,191,0.55); }
-  .lamp.good::after  { background: var(--good);  box-shadow: 0 0 18px 4px rgba(111,168,111,0.55); }
-  .lamp.loud::after  { background: var(--loud);  box-shadow: 0 0 18px 4px rgba(192,87,74,0.55); }
-  .lamp.quiet { box-shadow: 0 0 30px 6px rgba(78,143,191,0.12); }
-  .lamp.good  { box-shadow: 0 0 30px 6px rgba(111,168,111,0.12); }
-  .lamp.loud  { box-shadow: 0 0 30px 6px rgba(192,87,74,0.12); }
+  .light.quiet.active { background: var(--quiet); box-shadow: 0 0 22px 6px rgba(134,87,176,0.55); }
+  .light.good.active  { background: var(--good);  box-shadow: 0 0 22px 6px rgba(111,168,111,0.55); }
+  .light.loud.active  { background: var(--loud);  box-shadow: 0 0 22px 6px rgba(192,87,74,0.55); }
+
+  .light.quiet.dim { background: radial-gradient(circle at 35% 30%, #4a3a56, #2a2130 70%); }
+  .light.good.dim  { background: radial-gradient(circle at 35% 30%, #3a4a3a, #212e21 70%); }
+  .light.loud.dim  { background: radial-gradient(circle at 35% 30%, #4a3630, #2e2119 70%); }
+
+  .light-labels {
+    display: flex;
+    justify-content: center;
+    gap: 18px;
+    margin-top: 2px;
+  }
+  .light-labels span {
+    width: 58px;
+    text-align: center;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--text-faint);
+  }
 
   .lamp-label {
     font-family: var(--mono);
@@ -130,7 +141,7 @@
     position: absolute;
     left: 0; top: 0; bottom: 0;
     width: 0%;
-    background: linear-gradient(90deg, var(--quiet), var(--good) 55%, var(--loud) 88%);
+    background: linear-gradient(90deg, var(--quiet), var(--good) 50%, var(--loud) 85%);
     transition: width 0.08s linear;
   }
   .bar-scale {
@@ -223,7 +234,16 @@
   </header>
 
   <div class="lamp-card">
-    <div class="lamp quiet" id="lamp"></div>
+    <div class="stoplight">
+      <div class="light quiet" id="lightQuiet"></div>
+      <div class="light good" id="lightGood"></div>
+      <div class="light loud" id="lightLoud"></div>
+    </div>
+    <div class="light-labels">
+      <span>Quiet</span>
+      <span>Good</span>
+      <span>Loud</span>
+    </div>
     <div class="lamp-label" id="lampLabel"><b>IDLE</b></div>
     <div class="lamp-sub" id="lampSub">Tap Start. The lamp only changes after the level has held steady for a while — short peaks won't trigger it.</div>
   </div>
@@ -231,7 +251,7 @@
   <div class="meter-card">
     <div class="meter-row">
       <span class="meter-title">Instantaneous</span>
-      <span class="db-readout" id="dbReadout">— dB</span>
+      <span class="db-readout" id="dbReadout">— LUFS</span>
     </div>
     <div class="bar-track">
       <div class="bar-fill" id="barFill"></div>
@@ -297,7 +317,10 @@
   const toggleBtn   = document.getElementById("toggleBtn");
   const dbReadout   = document.getElementById("dbReadout");
   const barFill     = document.getElementById("barFill");
-  const lamp        = document.getElementById("lamp");
+  const lightQuiet  = document.getElementById("lightQuiet");
+  const lightGood   = document.getElementById("lightGood");
+  const lightLoud   = document.getElementById("lightLoud");
+  const lights = { quiet: lightQuiet, good: lightGood, loud: lightLoud };
   const lampLabel   = document.getElementById("lampLabel");
   const lampSub     = document.getElementById("lampSub");
   const trendCanvas = document.getElementById("trend");
@@ -570,8 +593,10 @@
   }
 
   function updateLamp(zone, integratedLUFS) {
-    lamp.classList.remove("quiet", "good", "loud");
-    lamp.classList.add(zone);
+    Object.keys(lights).forEach(z => {
+      lights[z].classList.remove("active", "dim");
+      lights[z].classList.add(z === zone ? "active" : "dim");
+    });
     const labels = {
       quiet: "Too quiet",
       good: "Good level",
@@ -596,9 +621,9 @@
     toggleBtn.classList.remove("active");
     dbReadout.textContent = "— LUFS";
     barFill.style.width = "0%";
-    lamp.classList.remove("quiet", "good", "loud");
     lampLabel.innerHTML = "<b>IDLE</b>";
     lampSub.textContent = "Tap Start. The lamp only changes after the level has held steady for a while — short peaks won't trigger it.";
+    Object.values(lights).forEach(el => el.classList.remove("active", "dim"));
     gatingDeque = [];
     trendHistory = [];
     candidateZone = "idle";
