@@ -592,11 +592,12 @@
  
       if (zone !== displayedZone && heldFor >= dwellSec) {
         displayedZone = zone;
-        updateLamp(displayedZone, integratedLUFS);
+        setLampZone(displayedZone);
       } else if (displayedZone === "idle") {
         displayedZone = zone;
-        updateLamp(displayedZone, integratedLUFS);
+        setLampZone(displayedZone);
       }
+      updateLampReadout(integratedLUFS);
     };
  
     function fastLoop() {
@@ -615,7 +616,7 @@
     fastLoop();
   }
  
-  function updateLamp(zone, integratedLUFS) {
+  function setLampZone(zone) {
     Object.keys(lights).forEach(z => {
       lights[z].classList.remove("active", "dim");
       lights[z].classList.add(z === zone ? "active" : "dim");
@@ -626,7 +627,15 @@
       loud: "Too loud"
     };
     lampLabel.innerHTML = "<b>" + labels[zone] + "</b>";
-    lampSub.textContent = "Integrated (gated): " + Math.round(integratedLUFS) + " LUFS over the last " + windowSec + "s";
+  }
+ 
+  function updateLampReadout(integratedLUFS) {
+    let text = "Integrated (gated): " + Math.round(integratedLUFS) + " LUFS over the last " + windowSec + "s";
+    if (candidateZone !== displayedZone && candidateZone !== "idle") {
+      const remaining = Math.max(0, dwellSec - (performance.now() - candidateSince) / 1000);
+      text += " · switching in " + remaining.toFixed(1) + "s";
+    }
+    lampSub.textContent = text;
   }
  
   function stop() {
