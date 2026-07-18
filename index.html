@@ -22,9 +22,9 @@
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
     --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   }
-
+ 
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-
+ 
   html, body {
     margin: 0;
     padding: 0;
@@ -34,7 +34,7 @@
     min-height: 100vh;
     overscroll-behavior-y: contain;
   }
-
+ 
   body {
     display: flex;
     flex-direction: column;
@@ -42,9 +42,9 @@
     padding: max(24px, env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom));
     gap: 20px;
   }
-
+ 
   .wrap { width: 100%; max-width: 440px; display: flex; flex-direction: column; gap: 20px; }
-
+ 
   header { text-align: center; }
   h1 {
     font-size: 19px;
@@ -57,7 +57,7 @@
     color: var(--text-dim);
     letter-spacing: 0.02em;
   }
-
+ 
   /* --- Status lamp: the signature element --- */
   .lamp-card {
     background: var(--panel);
@@ -69,14 +69,14 @@
     align-items: center;
     gap: 10px;
   }
-
+ 
   .stoplight {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 18px;
   }
-
+ 
   .light {
     width: 58px;
     height: 58px;
@@ -88,11 +88,11 @@
   .light.quiet.active { background: var(--quiet); box-shadow: 0 0 22px 6px rgba(134,87,176,0.55); }
   .light.good.active  { background: var(--good);  box-shadow: 0 0 22px 6px rgba(111,168,111,0.55); }
   .light.loud.active  { background: var(--loud);  box-shadow: 0 0 22px 6px rgba(192,87,74,0.55); }
-
+ 
   .light.quiet.dim { background: radial-gradient(circle at 35% 30%, #4a3a56, #2a2130 70%); }
   .light.good.dim  { background: radial-gradient(circle at 35% 30%, #3a4a3a, #212e21 70%); }
   .light.loud.dim  { background: radial-gradient(circle at 35% 30%, #4a3630, #2e2119 70%); }
-
+ 
   .light-labels {
     display: flex;
     justify-content: center;
@@ -107,7 +107,7 @@
     text-transform: uppercase;
     color: var(--text-faint);
   }
-
+ 
   .lamp-label {
     font-family: var(--mono);
     font-size: 13px;
@@ -117,7 +117,7 @@
   }
   .lamp-label b { color: var(--text); font-weight: 600; }
   .lamp-sub { font-size: 11.5px; color: var(--text-faint); text-align: center; max-width: 280px; }
-
+ 
   /* --- Fast meter --- */
   .meter-card {
     background: var(--panel);
@@ -128,7 +128,7 @@
   .meter-row { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 10px; }
   .meter-title { font-size: 12px; color: var(--text-dim); letter-spacing: 0.04em; text-transform: uppercase; }
   .db-readout { font-family: var(--mono); font-size: 26px; font-weight: 600; letter-spacing: -0.01em; }
-
+ 
   .bar-track {
     position: relative;
     height: 34px;
@@ -137,11 +137,16 @@
     border: 1px solid var(--border);
     overflow: hidden;
   }
-  .bar-fill {
+  .bar-gradient {
     position: absolute;
     left: 0; top: 0; bottom: 0;
-    width: 0%;
-    background: linear-gradient(90deg, var(--quiet), var(--good) 50%, var(--loud) 85%);
+    width: 100%;
+  }
+  .bar-mask {
+    position: absolute;
+    right: 0; top: 0; bottom: 0;
+    width: 100%;
+    background: var(--panel-2);
     transition: width 0.08s linear;
   }
   .bar-scale {
@@ -152,7 +157,7 @@
     color: var(--text-faint);
     margin-top: 6px;
   }
-
+ 
   /* --- Long-term trend strip --- */
   .trend-card {
     background: var(--panel);
@@ -162,7 +167,7 @@
   }
   .trend-title { font-size: 12px; color: var(--text-dim); letter-spacing: 0.04em; text-transform: uppercase; margin-bottom: 10px; }
   canvas#trend { width: 100%; height: 64px; display: block; border-radius: 6px; }
-
+ 
   /* --- Controls --- */
   .btn-row { display: flex; gap: 10px; }
   button.primary {
@@ -180,7 +185,7 @@
   button.primary.active { background: var(--loud); color: #fff; }
   button.primary:active { opacity: 0.85; }
   button.primary:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-
+ 
   details.settings {
     background: var(--panel);
     border: 1px solid var(--border);
@@ -201,9 +206,9 @@
   details.settings summary::-webkit-details-marker { display: none; }
   summary::after { content: "▸"; color: var(--text-faint); transition: transform 0.2s; }
   details[open] summary::after { transform: rotate(90deg); }
-
+ 
   .settings-body { padding: 4px 18px 18px; display: flex; flex-direction: column; gap: 16px; }
-
+ 
   .preset-row { display: flex; gap: 8px; }
   .preset-btn {
     flex: 1;
@@ -216,23 +221,23 @@
     cursor: pointer;
   }
   .preset-btn.selected { border-color: var(--brass); color: var(--text); }
-
+ 
   .field { display: flex; flex-direction: column; gap: 5px; }
   .field-label { display: flex; justify-content: space-between; font-size: 12px; color: var(--text-dim); }
   .field-label span:last-child { font-family: var(--mono); color: var(--text); }
   input[type="range"] { width: 100%; accent-color: var(--brass); }
-
+ 
   footer { font-size: 11px; color: var(--text-faint); text-align: center; line-height: 1.5; padding-top: 4px; }
 </style>
 </head>
 <body>
 <div class="wrap">
-
+ 
   <header>
     <h1>Chapel Level Monitor</h1>
     <div class="subtitle">External microphone · Web Audio</div>
   </header>
-
+ 
   <div class="lamp-card">
     <div class="stoplight">
       <div class="light quiet" id="lightQuiet"></div>
@@ -247,14 +252,15 @@
     <div class="lamp-label" id="lampLabel"><b>IDLE</b></div>
     <div class="lamp-sub" id="lampSub">Tap Start. The lamp only changes after the level has held steady for a while — short peaks won't trigger it.</div>
   </div>
-
+ 
   <div class="meter-card">
     <div class="meter-row">
       <span class="meter-title">Instantaneous</span>
       <span class="db-readout" id="dbReadout">— LUFS</span>
     </div>
     <div class="bar-track">
-      <div class="bar-fill" id="barFill"></div>
+      <div class="bar-gradient" id="barGradient"></div>
+      <div class="bar-mask" id="barMask"></div>
     </div>
     <div class="bar-scale">
       <span id="scaleMin">-60</span>
@@ -263,60 +269,61 @@
       <span id="scaleMax">0</span>
     </div>
   </div>
-
+ 
   <div class="trend-card">
     <div class="trend-title">Sustained level · last <span id="windowLabel">25</span>s</div>
     <canvas id="trend" width="400" height="64"></canvas>
   </div>
-
+ 
   <div class="btn-row">
     <button class="primary" id="toggleBtn">Start monitoring</button>
   </div>
-
+ 
   <details class="settings">
     <summary><span>Calibration</span><span></span></summary>
     <div class="settings-body">
-
+ 
       <div class="preset-row">
         <button class="preset-btn selected" data-preset="speech">Spoken word</button>
         <button class="preset-btn" data-preset="music">Music group</button>
       </div>
-
+ 
       <div class="field">
         <label class="field-label"><span>Quiet / good boundary</span><span id="quietVal">-30 dB</span></label>
         <input type="range" id="quietSlider" min="-50" max="-15" step="1" value="-30" />
       </div>
-
+ 
       <div class="field">
         <label class="field-label"><span>Good / loud boundary</span><span id="loudVal">-12 dB</span></label>
         <input type="range" id="loudSlider" min="-30" max="0" step="1" value="-12" />
       </div>
-
+ 
       <div class="field">
         <label class="field-label"><span>Averaging window</span><span id="winVal">25 s</span></label>
         <input type="range" id="winSlider" min="1" max="60" step="1" value="25" />
       </div>
-
+ 
       <div class="field">
         <label class="field-label"><span>Dwell before lamp changes</span><span id="dwellVal">8 s</span></label>
         <input type="range" id="dwellSlider" min="0" max="20" step="1" value="8" />
       </div>
-
+ 
     </div>
   </details>
-
+ 
   <footer>Averaging window and dwell time control how long a level must persist before the status lamp changes — brief peaks are absorbed. Adjust boundaries live in the room to calibrate.</footer>
-
+ 
 </div>
-
+ 
 <script>
 (function () {
   "use strict";
-
+ 
   // ---- DOM ----
   const toggleBtn   = document.getElementById("toggleBtn");
   const dbReadout   = document.getElementById("dbReadout");
-  const barFill     = document.getElementById("barFill");
+  const barGradient = document.getElementById("barGradient");
+  const barMask     = document.getElementById("barMask");
   const lightQuiet  = document.getElementById("lightQuiet");
   const lightGood   = document.getElementById("lightGood");
   const lightLoud   = document.getElementById("lightLoud");
@@ -326,7 +333,7 @@
   const trendCanvas = document.getElementById("trend");
   const trendCtx    = trendCanvas.getContext("2d");
   const windowLabel = document.getElementById("windowLabel");
-
+ 
   const quietSlider = document.getElementById("quietSlider");
   const loudSlider  = document.getElementById("loudSlider");
   const winSlider   = document.getElementById("winSlider");
@@ -338,19 +345,33 @@
   const scaleQuiet  = document.getElementById("scaleQuiet");
   const scaleLoud   = document.getElementById("scaleLoud");
   const presetBtns  = document.querySelectorAll(".preset-btn");
-
+ 
   // ---- Config state ----
   let quietMax = -30;   // below this = quiet
   let loudMin  = -12;   // above this = loud
   let windowSec = 25;   // long-term averaging window
   let dwellSec  = 8;    // time a candidate zone must persist before lamp switches
   const HYSTERESIS = 2; // dB band to prevent flicker at boundaries
-
+ 
   const presets = {
     speech: { quiet: -30, loud: -12, win: 25 },
     music:  { quiet: -26, loud: -6,  win: 20 }
   };
-
+ 
+  const SCALE_MIN = -60, SCALE_MAX = 0;
+  function pctOnScale(db) {
+    return Math.max(0, Math.min(100, ((db - SCALE_MIN) / (SCALE_MAX - SCALE_MIN)) * 100));
+  }
+  function updateBarGradient() {
+    const qPct = pctOnScale(quietMax);
+    const lPct = pctOnScale(loudMin);
+    barGradient.style.background =
+      "linear-gradient(90deg, " +
+      "var(--quiet) 0%, var(--quiet) " + qPct + "%, " +
+      "var(--good) " + qPct + "%, var(--good) " + lPct + "%, " +
+      "var(--loud) " + lPct + "%, var(--loud) 100%)";
+  }
+ 
   function applyConfigToUI() {
     quietSlider.value = quietMax;
     loudSlider.value = loudMin;
@@ -363,9 +384,10 @@
     scaleQuiet.textContent = quietMax;
     scaleLoud.textContent = loudMin;
     windowLabel.textContent = windowSec;
+    updateBarGradient();
   }
   applyConfigToUI();
-
+ 
   presetBtns.forEach(btn => {
     btn.addEventListener("click", () => {
       presetBtns.forEach(b => b.classList.remove("selected"));
@@ -375,17 +397,17 @@
       applyConfigToUI();
     });
   });
-
+ 
   quietSlider.addEventListener("input", () => { quietMax = Number(quietSlider.value); applyConfigToUI(); });
   loudSlider.addEventListener("input",  () => { loudMin  = Number(loudSlider.value);  applyConfigToUI(); });
   winSlider.addEventListener("input",   () => { windowSec = Number(winSlider.value); applyConfigToUI(); });
   dwellSlider.addEventListener("input", () => { dwellSec  = Number(dwellSlider.value); applyConfigToUI(); });
-
+ 
   // ---- Audio state ----
   let audioCtx, preFilter, rlbFilter, sourceNode, scriptNode, muteGain, stream;
   let rafId = null;
   let running = false;
-
+ 
   // ---- BS.1770 K-weighting filter design (fs-adaptive) ----
   // Reproduces the published 48kHz coefficients exactly, and derives correct
   // coefficients at other sample rates (44.1kHz on many iPhones) using the
@@ -419,13 +441,13 @@
       a2: (1 - K / Q + K * K) / a0
     };
   }
-
+ 
   // ---- Loudness helpers ----
   const ABS_GATE_LUFS = -70;
   const REL_GATE_OFFSET = -10;
   function loudnessFromZ(z) { return z > 0 ? -0.691 + 10 * Math.log10(z) : -70; }
   function zFromLoudness(l) { return Math.pow(10, (l + 0.691) / 10); }
-
+ 
   function computeGatedIntegrated(blocks) {
     if (blocks.length === 0) return -70;
     const absThreshZ = zFromLoudness(ABS_GATE_LUFS);
@@ -439,36 +461,36 @@
     const meanZRel = passRel.reduce((a, b) => a + b.z, 0) / passRel.length;
     return loudnessFromZ(meanZRel);
   }
-
+ 
   // Momentary (400ms sliding window) block accumulator
   let blockSamples = 0, sqBuf = null, sqPtr = 0, sqSum = 0, sqFilled = 0;
-
+ 
   // Gating deque: {t, z} snapshots taken roughly every audio callback (~85-100ms)
   let gatingDeque = [];
-
+ 
   let latestMomentaryLUFS = -70;
   let smoothedMomentaryLUFS = -70;
   const FAST_ATTACK = 0.5;
   const FAST_RELEASE = 0.15;
-
+ 
   let trendHistory = [];
   const TREND_MAX_POINTS = 300;
-
+ 
   let candidateZone = "idle";
   let candidateSince = 0;
   let displayedZone = "idle";
-
+ 
   function trimGatingDeque(nowMs) {
     const cutoff = nowMs - windowSec * 1000;
     while (gatingDeque.length && gatingDeque[0].t < cutoff) gatingDeque.shift();
   }
-
+ 
   function zoneForDb(db) {
     if (db < quietMax) return "quiet";
     if (db > loudMin) return "loud";
     return "good";
   }
-
+ 
   function zoneWithHysteresis(db) {
     if (displayedZone === "quiet") {
       if (db > quietMax + HYSTERESIS) return db > loudMin ? "loud" : "good";
@@ -485,7 +507,7 @@
     }
     return zoneForDb(db);
   }
-
+ 
   async function start() {
     try {
       stream = await navigator.mediaDevices.getUserMedia({
@@ -499,10 +521,10 @@
       lampSub.textContent = "Microphone access failed: " + err.message;
       return;
     }
-
+ 
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === "suspended") await audioCtx.resume();
-
+ 
     const fs = audioCtx.sampleRate;
     blockSamples = Math.round(fs * 0.4);
     sqBuf = new Float32Array(blockSamples);
@@ -510,28 +532,28 @@
     gatingDeque = [];
     latestMomentaryLUFS = -70;
     smoothedMomentaryLUFS = -70;
-
+ 
     const preC = makePreFilterCoeffs(fs);
     const rlbC = makeRlbFilterCoeffs(fs);
     preFilter = audioCtx.createIIRFilter([preC.b0, preC.b1, preC.b2], [1, preC.a1, preC.a2]);
     rlbFilter = audioCtx.createIIRFilter([rlbC.b0, rlbC.b1, rlbC.b2], [1, rlbC.a1, rlbC.a2]);
-
+ 
     sourceNode = audioCtx.createMediaStreamSource(stream);
     scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
     muteGain = audioCtx.createGain();
     muteGain.gain.value = 0;
-
+ 
     sourceNode.connect(preFilter);
     preFilter.connect(rlbFilter);
     rlbFilter.connect(scriptNode);
     scriptNode.connect(muteGain);
     muteGain.connect(audioCtx.destination);
-
+ 
     running = true;
     toggleBtn.textContent = "Stop monitoring";
     toggleBtn.classList.add("active");
     lampSub.textContent = "Listening…";
-
+ 
     scriptNode.onaudioprocess = (e) => {
       if (!running) return;
       const input = e.inputBuffer.getChannelData(0);
@@ -547,27 +569,27 @@
         }
         sqPtr = (sqPtr + 1) % blockSamples;
       }
-
+ 
       const meanSq = sqSum / Math.max(sqFilled, 1);
       latestMomentaryLUFS = Math.max(-70, loudnessFromZ(meanSq));
-
+ 
       const now = performance.now();
       gatingDeque.push({ t: now, z: meanSq });
       trimGatingDeque(now);
-
+ 
       const integratedLUFS = computeGatedIntegrated(gatingDeque);
-
+ 
       trendHistory.push(integratedLUFS);
       if (trendHistory.length > TREND_MAX_POINTS) trendHistory.shift();
       drawTrend();
-
+ 
       const zone = zoneWithHysteresis(integratedLUFS);
       if (zone !== candidateZone) {
         candidateZone = zone;
         candidateSince = now;
       }
       const heldFor = (now - candidateSince) / 1000;
-
+ 
       if (zone !== displayedZone && heldFor >= dwellSec) {
         displayedZone = zone;
         updateLamp(displayedZone, integratedLUFS);
@@ -576,22 +598,23 @@
         updateLamp(displayedZone, integratedLUFS);
       }
     };
-
+ 
     function fastLoop() {
       if (!running) return;
       const rate = latestMomentaryLUFS > smoothedMomentaryLUFS ? FAST_ATTACK : FAST_RELEASE;
       smoothedMomentaryLUFS += (latestMomentaryLUFS - smoothedMomentaryLUFS) * rate;
-
+ 
       const clamped = Math.max(-60, Math.min(0, smoothedMomentaryLUFS));
       dbReadout.textContent = Math.round(clamped) + " LUFS";
       const pct = ((clamped + 60) / 60) * 100;
-      barFill.style.width = Math.max(0, Math.min(100, pct)) + "%";
-
+      const levelPct = Math.max(0, Math.min(100, pct));
+      barMask.style.width = (100 - levelPct) + "%";
+ 
       rafId = requestAnimationFrame(fastLoop);
     }
     fastLoop();
   }
-
+ 
   function updateLamp(zone, integratedLUFS) {
     Object.keys(lights).forEach(z => {
       lights[z].classList.remove("active", "dim");
@@ -605,7 +628,7 @@
     lampLabel.innerHTML = "<b>" + labels[zone] + "</b>";
     lampSub.textContent = "Integrated (gated): " + Math.round(integratedLUFS) + " LUFS over the last " + windowSec + "s";
   }
-
+ 
   function stop() {
     running = false;
     if (rafId) cancelAnimationFrame(rafId);
@@ -616,11 +639,11 @@
     if (muteGain) muteGain.disconnect();
     if (stream) stream.getTracks().forEach(t => t.stop());
     if (audioCtx) audioCtx.close();
-
+ 
     toggleBtn.textContent = "Start monitoring";
     toggleBtn.classList.remove("active");
     dbReadout.textContent = "— LUFS";
-    barFill.style.width = "0%";
+    barMask.style.width = "100%";
     lampLabel.innerHTML = "<b>IDLE</b>";
     lampSub.textContent = "Tap Start. The lamp only changes after the level has held steady for a while — short peaks won't trigger it.";
     Object.values(lights).forEach(el => el.classList.remove("active", "dim"));
@@ -630,19 +653,19 @@
     displayedZone = "idle";
     drawTrend();
   }
-
+ 
   function drawTrend() {
     const w = trendCanvas.width, h = trendCanvas.height;
     trendCtx.clearRect(0, 0, w, h);
     trendCtx.fillStyle = "#171b1e";
     trendCtx.fillRect(0, 0, w, h);
-
+ 
     if (trendHistory.length < 2) return;
-
+ 
     const minDb = -60, maxDb = 0;
     const stepX = w / (TREND_MAX_POINTS - 1);
     const startIdx = TREND_MAX_POINTS - trendHistory.length;
-
+ 
     trendCtx.strokeStyle = "rgba(255,255,255,0.08)";
     trendCtx.lineWidth = 1;
     [quietMax, loudMin].forEach(db => {
@@ -652,7 +675,7 @@
       trendCtx.lineTo(w, y);
       trendCtx.stroke();
     });
-
+ 
     trendCtx.beginPath();
     trendHistory.forEach((db, i) => {
       const x = (startIdx + i) * stepX;
@@ -664,14 +687,14 @@
     trendCtx.lineWidth = 2;
     trendCtx.stroke();
   }
-
+ 
   drawTrend();
-
+ 
   toggleBtn.addEventListener("click", () => {
     if (running) stop();
     else start();
   });
-
+ 
 })();
 </script>
 </body>
